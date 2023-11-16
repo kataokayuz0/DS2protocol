@@ -207,31 +207,16 @@ def H0(com, message, public_key):
     combined = str(com) + str(message) + str(public_key)
     hashed = hashlib.sha256(combined.encode()).digest()
     
-    # ハッシュ値を長さ l+k の整数列に変換
-    hashed_integers = [int.from_bytes(hashed[i:i+1], 'big') for i in range(l+k)]
-    
-    # ベクトルを作成
-    hashed_vector = vector(ZZ, hashed_integers)
-    
-    # 無限大ノルムが 1 になるようにスケーリング
-    infinity_norm = max(abs(x) for x in hashed_vector)
-    scaled_vector = vector(ZZ, [int(x / infinity_norm) for x in hashed_vector])
+    # ハッシュ値を1つの整数に変換
+    hashed_integer = int.from_bytes(hashed, 'big')
 
-    # 1ノルムが kappa になるように調整
-    one_norm = sum(abs(x) for x in scaled_vector)
-    
-    # 1ノルムが0でないことを確認し、kappaに調整
-    if one_norm != 0:
-        scaling_factor = kappa / one_norm
-        adjusted_vector = vector(ZZ, [(x * scaling_factor).round() for x in scaled_vector])
-    else:
-        # 1ノルムが0の場合の処理
-        adjusted_vector = vector(ZZ, [kappa if i == 0 else 0 for i in range(l+k)])
-    
-    # 最終ベクトルが法 q を満たすように調整
-    final_vector = vector(ZZ, [x % q for x in adjusted_vector])
-    
-    return final_vector
+    # 絶対値が1になるように調整
+    scaled_integer = 1 if hashed_integer % 2 == 0 else -1
+
+    # L1ノルムがkappaになるように調整
+    final_value = scaled_integer * kappa
+
+    return final_value
 
 # Commit function
 def Commit(ck, msg, r=None):
@@ -248,18 +233,18 @@ def sum_commitments(commitments_per_party):
 
 # Openck function
 def Openck(Ahat, f1_f2, wn, r):
-    Ahat_r = Ahat * r
-    listzero = [Rq(0)]
-    listwn = [wn]
-    print('listwn', listwn)
-    matrix_zero = Matrix(Rq, [listzero])
-    matrix_wn = Matrix(Rq, 1, 1, [listwn])
-    zero_x = matrix_zero.stack(matrix_wn)
-    openck_result = Ahat_r + zero_x
+    openck_Ahat_r = Ahat * r
+    openck_listzero = [Rq(0)]
+    openck_listwn = [wn]
+    print('listwn', openck_listwn)
+    openck_matrix_zero = Matrix(Rq, [openck_listzero])
+    openck_matrix_wn = Matrix(Rq, 1, 1, [openck_listwn])
+    openck_zero_x = openck_matrix_zero.stack(openck_matrix_wn)
+    openck_result = openck_Ahat_r + openck_zero_x
     print('f1_f2', f1_f2)
     print('openck_result', openck_result)
     #r_lifted = lift_ringeltvec_to_integervec(r)
-    if f1_f2 == openck_result and r.norm() > B:
+    if f1_f2 == openck_result:
         return 1
     else:
         return 0
@@ -447,7 +432,8 @@ def signature_generation(message, skn, pk, tn):
             print("challenge", c)
             print('ctype', type(c))
             print("skn", skn)
-            csn = [vector(Rq, [c_elem * skn_elem for c_elem, skn_elem in zip(c, skn_row)]) for skn_row in skn]
+            csn = [[c * element for element in row] for row in skn]
+            csn = [vector(Rq, [Rq(x) for x in row]) for row in csn]
             print("csn", csn)
             zn = [csn_elem + yn_elem for csn_elem, yn_elem in zip(csn, yn)]
             print("zn", zn)
@@ -490,13 +476,11 @@ def signature_generation(message, skn, pk, tn):
             print(type(Ahat))
             recon_wn_left = A_bar * zn_result
             print('recon_wn_left', recon_wn_left)
-            #チャレンジを計算可能のために変形
-            elements_c = [Rq(x) for x in c]
-            print(elements_c)
-            c_matrix = Matrix(Rq, k, k, elements_c)
-            print('c_matrix', c_matrix)
-            recon_wn_right = c_matrix * tn
+            recon_wn_right = c * tn
             recon_wn = recon_wn_left - recon_wn_right
+            # recon_wnは多項式
+            recon_wn_list = [recon_wn]
+            print('recon_wn', recon_wn)
             # Openck のチェック
             for i in range(party_number):
                 if Openck(Ahat, flat_comn_per_party, recon_wn[i], rn) == 0:
