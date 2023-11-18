@@ -1,12 +1,10 @@
-#DS2 protocol
-
 #Matrix Generation
 import hashlib
 import itertools
 from sage.all import *
 from sage.stats.distributions.discrete_gaussian_integer import DiscreteGaussianDistributionIntegerSampler
 from sage.modules.free_module_element import vector as sage_vector
-
+​
 # Parameters
 number = 2 ** 46
 next_prime_number = next_prime(number)
@@ -18,41 +16,40 @@ n = 256
 k, l = 2, 2
 sigma = 3  # Standard deviation for Gaussian sampler
 party_number = 2
-
+​
 # Define the ring Rq
 R.<x> = PolynomialRing(ZZ)
 Zq = Integers(q)
 Rq = PolynomialRing(Zq, 'x').quotient(x^n + 1)
-
-
+​
+​
 #グローバル変数にする
 D = DiscreteGaussianDistributionIntegerSampler(sigma=sigma)
 def discrete_gaussian_sampler(std_dev, ring):
     return ring([D() for _ in range(n)])
-
+​
 def commit(matrix, party_number):
     combined = str(matrix) + str(party_number)
     return hashlib.sha256(combined.encode()).hexdigest()
-
+​
 # H1 function representing the random oracle commitment
 def H1(matrix, party_number):
     return commit(matrix, party_number)
-
+​
 # Generate k×l matrices using discrete Gaussian samplers
 matrices = []
 for _ in range(party_number):
     matrix = Matrix(Rq, k, l, lambda i, j: discrete_gaussian_sampler(sigma, Rq))
     matrices.append(matrix)
     print(matrices)
-
+​
 # Commitments for each party
 gn = []
 for i, matrix in enumerate(matrices):
     commitment = H1(matrix, i + 1)
     gn.append(commitment)
-
+​
 print("Commitments stored in gn:", gn)
-
 
 
 
@@ -76,10 +73,9 @@ else:
     print("Public random matrix A¯:\n", A_bar)
     
     
-    
-#Key Pair Generation    
-    
-    # H2 function representing the random oracle commitment
+#Key Pair Generation
+
+# H2 function representing the random oracle commitment
 def H2(matrix, party_number):
     return commit(matrix, party_number)
 
@@ -131,11 +127,11 @@ skn = sn
 pk = (A, t_combined)
 #print("Local output for Pn (skn, pk):", skn, pk)
 print("skn", skn)
-print("pk", pk)
+print("pk", pk)    
 
 
 
-#Protocol DS2sign
+#Protocol DS2.Signn(sid, skn, pk, µ)
 #Inputs
 
 # H3 function for computing the per-message commitment key
@@ -165,10 +161,10 @@ else:
     print("Per-message commitment key ck:", ck)
     
     
-#Signature Generation    
+    
+#Signature Generation
+#Setting parameters
 
-import random
-from sage.modules.free_module_element import vector
 # Parameters
 eta = 5
 k, l = 2, 2
@@ -185,6 +181,15 @@ epsilon = 0.1
 trapq_candidate = N ** (2 + epsilon)
 trapq = next_prime(ceil(trapq_candidate)) #ceilを使って整数に丸める
 trapl, trapw = ceil(log(trapq, 2)), ceil(log(trapq, 2))
+s = alpha * T * (sqrt(2 * pi))
+
+
+
+#1.Compute the first message as follows
+#2. Upon receiving comj, compute the signature share
+
+import random
+from sage.modules.free_module_element import vector
 
 # 可逆であることを確認する関数を定義
 def is_invertible(m, Rq):
@@ -203,54 +208,15 @@ def generate_invertible_matrix(sigma, Rq):
         if is_invertible(ahat1_1, Rq):
             return ahat1_1  # 可逆ならこれを返す
 
-def H0(com, message, public_key):
-    combined = str(com) + str(message) + str(public_key)
-    hashed = hashlib.sha256(combined.encode()).digest()
-    
-    # ハッシュ値を1つの整数に変換
-    hashed_integer = int.from_bytes(hashed, 'big')
+def polynomial_to_vector(poly, N):
+    # 多項式の係数をリストとして取得
+    coeffs = poly.list()
 
-    # 絶対値が1になるように調整
-    scaled_integer = 1 if hashed_integer % 2 == 0 else -1
+    # N次までの係数を含むベクトルを作成
+    # 多項式の次数がN未満の場合、残りの係数は0で埋める
+    vec = vector([coeffs[i] if i < len(coeffs) else 0 for i in range(N)])
 
-    # L1ノルムがkappaになるように調整
-    final_value = scaled_integer * kappa
-
-    return final_value
-
-# Commit function
-def Commit(ck, msg, r=None):
-    if r is None:  # If r is not provided, sample it from D(Sr)
-        r = ZZ.random_element(-Sr, Sr + 1)
-    combined = str(ck) + str(msg) + str(r)
-    return hashlib.sha256(combined.encode()).hexdigest()
-
-# 全てのパーティのコミットメントを合計する関数
-def sum_commitments(commitments_per_party):
-    # zip(*commitments_per_party)は各サブリストから同じ位置にある要素を組み合わせる
-    # すべての組み合わせた要素（つまり、各パーティの同じ位置にあるコミットメント）を足し合わせる
-    return [sum(commitments) for commitments in zip(*commitments_per_party)]
-
-# Openck function
-def Openck(Ahat, f1_f2, wn, r):
-    openck_Ahat_r = Ahat * r
-    openck_listzero = [Rq(0)]
-    openck_listwn = [wn]
-    print('listwn', openck_listwn)
-    openck_matrix_zero = Matrix(Rq, [openck_listzero])
-    openck_matrix_wn = Matrix(Rq, 1, 1, [openck_listwn])
-    openck_zero_x = openck_matrix_zero.stack(openck_matrix_wn)
-    openck_result = openck_Ahat_r + openck_zero_x
-    print('f1_f2', f1_f2)
-    print('openck_result', openck_result)
-    #r_lifted = lift_ringeltvec_to_integervec(r)
-    if f1_f2 == openck_result:
-        return 1
-    else:
-        return 0
-    
-def polynomial_to_vector(poly, n):
-    return vector(ZZ, [poly[i] for i in range(n)])
+    return vec
 
 def convert_to_Rq_module(vec, Rq):
     return vector(Rq, [Rq(x) for x in vec])
@@ -262,28 +228,7 @@ def lift_ringelt_to_integervec(z):
 def lift_ringeltvec_to_integervec(z):
     chain_result = list(itertools.chain(*[lift_ringelt_to_integervec(xi) for xi in z]))
     print('chain_result', chain_result)
-    return vector(ZZ, chain_result)
-
-s = alpha * T * (sqrt(2 * pi))
-
-# def rohs_rm_cal(zn_list, s):
-#     rohs_rm = 0
-#     for zn in zn_list:
-#         zn_list = vector(Rq, zn_list)
-#         zn_list_lifted = lift_ringeltvec_to_integervec(zn_list)
-#         rohs_zn = exp(-pi * (zn_list_lifted.norm()^2) /  s^2)
-#         rohs_rm = rohs_rm + rohs_zn
-#     return rohs_rm    
-
-# def rohcsn_s_rm_cal(zn_list, csn_list, s):
-#     rohcsn_s_rm = 0
-#     for zn, csn in zip(zn_list, csn_list):
-#         zn_list = vector(Rq, zn_list)
-#         csn_list = vector(Rq, csn_list)
-#         zn_v_lifted = lift_ringeltvec_to_integervec(zn_list - csn_list)
-#         rohcsn_s_zn = exp(-pi * (zn_v_lifted.norm()^2) /  s^2)
-#         rohcsn_s_rm = rohs_rm + rohs_zn
-#     return rohcsn_s_rm
+    return vector(ZZ, chain_result)        
 
 def calculate_sums(csn_list, zn_list, s):
     rohs_rm_total = 0
@@ -298,7 +243,7 @@ def calculate_sums(csn_list, zn_list, s):
         rohcsn_s_rm_total += exp(-pi * (csn_lifted.norm()) / s^2)
 
     return rohs_rm_total, rohcsn_s_rm_total
-    
+
 def Ds(x, s, rohs_rm):
     x_lifted = lift_ringeltvec_to_integervec(x)
     print('x_lifted', x_lifted)
@@ -315,14 +260,109 @@ def Dcsn_s(v, x, s, rohcsn_s_rm):
     print('rohcsn_s_zn', rohcsn_s_zn)
     return rohcsn_s_zn / rohcsn_s_rm
 
+#a. sample yn and compute wn
+def sampleyn():
+    sample_yn = [vector(Rq, [discrete_gaussian_sampler(sigma, Rq) for _ in range(l+k)]) for _ in range(party_number)]
+    return sample_yn
 
+def computewn(A_bar, sampled_yn):
+    wn = []
+    for i in range(party_number):
+            wni = A_bar * sampled_yn[i]
+            wn.append(wni)
+    flat_wn = [item for sublist in wn for item in sublist]  
+    return flat_wn
+
+#b. compute comn with rn
+
+def samplern():
+    sampled_rn = []
+    for i in range(0, party_number*k):
+        r = Matrix(Rq, trapl + 2*trapw, 1, lambda i, j: discrete_gaussian_sampler(sigma, Rq))
+        sampled_rn.append(r) 
+    return sampled_rn
+
+def CGen():
+    ahat1_1 = generate_invertible_matrix(sigma, Rq)
+    ahat1_j = Matrix(Rq, 1, trapl + 2*trapw - 1, lambda i, j: discrete_gaussian_sampler(sigma, Rq))
+    ahat2_j = Matrix(Rq, 1, trapl + 2*trapw - 2, lambda i, j: discrete_gaussian_sampler(sigma, Rq))
+    list1 = [Rq(0), Rq(1)]
+    matrix_list1 = Matrix(Rq, [list1])
+    matrix_up = ahat1_1.augment(ahat1_j)
+    matrix_down = matrix_list1.augment(ahat2_j)
+    Ahat = matrix_up.stack(matrix_down)
+    return Ahat    
+
+def commitck(flat_wn, sampled_rn, Ahat):
+    #Initialize commiment of each party
+    comn_per_party = [[] for _ in range(party_number)]
+    for p in range(0, party_number * k): # それぞれの係数に行うため、party_number * k回必要
+        fleft = Ahat * sampled_rn[p]
+        listzero = [Rq(0)]
+        listwn = [flat_wn[p]] # 順に係数を取り出す
+        print('listwn', listwn)
+        matrix_zero = Matrix(Rq, [listzero])
+        matrix_wn = Matrix(Rq, 1, 1, [listwn])
+        fright = matrix_zero.stack(matrix_wn)
+        f = fleft + fright
+        #パーティごとのサブリストに追加
+        comn_per_party[p // k].append(f)
+    return matrix_zero, comn_per_party
+
+def sum_commitments(commitments_per_party):
+    return [sum(commitments) for commitments in zip(*commitments_per_party)]
+    
+#a. set com
+def setcom(comn_per_party):
+    com = sum_commitments(comn_per_party)
+    return com
+
+#b. derive challenge
+# SHAKE関数を用いてランダムなビット列を生成する関数
+def generate_random_bits(com, message, pk, length):
+    seed = str(com) + str(message) + str(pk)
+    shake = hashlib.shake_256()
+    shake.update(seed.encode())
+    return shake.digest(length)
+
+# 1または-1の値をkappa個生成
+def generate_coefficients(com, message, pk):
+    random_bits = generate_random_bits(com, message, pk, kappa)
+    coefficients = [1 if bit % 2 == 0 else -1 for bit in random_bits]
+    return coefficients
+
+# R上の多項式に係数をランダムに配置
+def create_random_polynomial(com, message, pk, N, kappa):
+    R = PolynomialRing(ZZ, 'x')
+    x = R.gen()
+
+    # kappa 個の位置をランダムに選択
+    positions = random.sample(range(N), kappa)
+
+    # 選択された位置に 1 または -1 をランダムに配置
+    coefficients = generate_coefficients(com, message, pk)
+    challenge = sum(random.choice([-1, 1]) * x^pos for pos in positions)
+
+    # 係数が配置されていない位置には 0 を配置
+    challenge += sum(0 * x^i for i in range(N) if i not in positions)
+
+    print('challenge', challenge)
+    return challenge
+
+#c. Computes a signature share
+def computezn(challenge, skn, yn):
+    csn = [[challenge * element for element in row] for row in skn]
+    csn = [vector(Rq, [Rq(x) for x in row]) for row in csn]
+    computed_zn = [csn_elem + yn_elem for csn_elem, yn_elem in zip(csn, yn)]
+    return computed_zn, csn
+
+#d. Run the rejection sampling
 def rejection_sample(csn_list, zn_list):
     print("Starting rejection_sampling...")  # 追加
-    
+    rejec_zn_result = []
     rohs_rm, rohcsn_s_rm = calculate_sums(csn_list, zn_list, s)
-    csn_result = []
-    zn_result = []
     for csn, zn in zip(csn_list, zn_list):
+        print('aaaaaaa')
         csn_vec = vector(Rq, csn)
         zn_vec = vector(Rq, zn)
 
@@ -339,181 +379,137 @@ def rejection_sample(csn_list, zn_list):
         if random_probability >= acceptance_probability:
             return "restart"
         else:
-            csn_result.append(csn_vec)
-            zn_result.append(zn_vec)
-            print(csn_result)
-            print(zn_result)
-            return (csn_result, zn_result)
-
-# Signature Generation
-def signature_generation(message, skn, pk, tn):
-    global flat_wn
-    global rn
-    z = []
-    wjlist = []
+            rejec_zn_result.append(zn_vec)
+    return rejec_zn_result
+        
+def sig1_sig2():
     while True:
-        print("Starting signature generation...")  # 追加
-        rn = []
+        zn_result = []
+        sampled_yn = sampleyn()
+        flat_wn = computewn(A_bar, sampled_yn)
+        sampled_rn = samplern()    
+        Ahat = CGen()    
+        matrix_zero, comn_per_party = commitck(flat_wn, sampled_rn, Ahat)
+        com = setcom(comn_per_party)
 
-    # 1. Compute the first message
-        print("Generating yn...")  # 追加
+        #send out comn        
 
-        # Generate list using discrete Gaussian samplers
-        yn = [vector(Rq, [discrete_gaussian_sampler(sigma, Rq) for _ in range(l+k)]) for _ in range(party_number)]
-        print("yn", yn)
-
-        print("Calculating wn...")  # 追加
-        wn = []
-        for i in range(party_number):
-            wni = A_bar * yn[i]
-            wn.append(wni)
-        flat_wn = [item for sublist in wn for item in sublist]    
-        print("flat_wn", flat_wn)
-
-        print("Commitck...")  # 追加
-
-        #trapdoor commitment    
-        # パーティごとのコミットメントリストを初期化
-        comn_per_party = [[] for _ in range(party_number)]
-        #CGen
-        ahat1_1 = generate_invertible_matrix(sigma, Rq)
-        ahat1_j = Matrix(Rq, 1, trapl + 2*trapw - 1, lambda i, j: discrete_gaussian_sampler(sigma, Rq))
-        ahat2_j = Matrix(Rq, 1, trapl + 2*trapw - 2, lambda i, j: discrete_gaussian_sampler(sigma, Rq))
-        list1 = [Rq(0), Rq(1)]
-        matrix_list1 = Matrix(Rq, [list1])
-        matrix_up = ahat1_1.augment(ahat1_j)
-        matrix_down = matrix_list1.augment(ahat2_j)
-        Ahat = matrix_up.stack(matrix_down)
-        #Commitck
-        # 入力がk×1となるため、係数ごとにコミットメントを行う
-        for p in range(0, party_number * k): # それぞれの係数に行うため、party_number * k回必要
-            r = Matrix(Rq, trapl + 2*trapw, 1, lambda i, j: discrete_gaussian_sampler(sigma, Rq))
-            rn.append(r) # rnにrを保存しておく
-            fleft = Ahat * r
-            listzero = [Rq(0)]
-            listwn = [flat_wn[p]] # 順に係数を取り出す
-            print('listwn', listwn)
-            matrix_zero = Matrix(Rq, [listzero])
-            matrix_wn = Matrix(Rq, 1, 1, [listwn])
-            fright = matrix_zero.stack(matrix_wn)
-            f = fleft + fright
-
-            # p // kを使用して、現在の係数がどのパーティに属しているかを決定し、そのパーティのサブリストに追加
-            comn_per_party[p // k].append(f)
-            
-        print("rn lens: ", len(rn))
-        
-        for i in range(party_number*k):
-            print("rn dimensions: {0} x {1}".format(rn[i].nrows(), rn[i].ncols()))
-            print("rn_type", type(rn[i]))
-
-        # それぞれのパーティごとに計算されたコミットメントを表示
-        for party_index, party_comn in enumerate(comn_per_party):
-            print(f"Party {party_index} commitments: {party_comn}")
-            
-        # comn_per_partyの全体の大きさ（パーティの数）を出力
-        print("Total number of parties:", len(comn_per_party))
-
-        # 各パーティのコミットメントの数を出力
-        for party_index, party_comn in enumerate(comn_per_party):
-            print(f"Party {party_index} has {len(party_comn)} commitments.")
-
-    # 2.Upon receiving comj for all j ∈ [n − 1] compute the signature share as follows.   
-        if abort_flag:
-            return "abort"
+        derived_challenge = create_random_polynomial(com, message, pk, N, kappa)
+        computed_zn, csn = computezn(derived_challenge, skn, sampled_yn)
+        result = rejection_sample(csn, computed_zn)
+        if result == "restart":
+            print("Restarting the protocol inside signature generation...") 
+            continue
         else:
-            # Party 0 と Party 1 のコミットメントを足し合わせる
-            com_sum = sum_commitments(comn_per_party)
+            zn_result = result
+            print('zn_result', zn_result)
+            break
 
-            # 足し合わせたコミットメントと大きさを表示
-            print("Combined commitments for all parties:", com_sum)
-            print("Len of com_sum :", len(com_sum))
-            c = H0(com_sum, message, pk)
-            print("challenge", c)
-            print('ctype', type(c))
-            print("skn", skn)
-            csn = [[c * element for element in row] for row in skn]
-            csn = [vector(Rq, [Rq(x) for x in row]) for row in csn]
-            print("csn", csn)
-            zn = [csn_elem + yn_elem for csn_elem, yn_elem in zip(csn, yn)]
-            print("zn", zn)
-            restart = False
+    return Ahat, comn_per_party, matrix_zero, derived_challenge, sampled_rn, zn_result
             
-#             rohs_rm = rohs_rm_cal(zn, s)
-#             print('rohs_rm', rohs_rm)
-#             rohcsn_s_rm = rohcsn_s_rm_cal(zn, csn, s)
-#             print('rohcsn_s_rm', rohcsn_s_rm)
-            
-            result = rejection_sample(csn, zn)
-            if result == "restart":
-                    print("Restarting the protocol inside signature generation...") 
-                    restart = True  
-                    continue
-            elif result:  
-                csn_result, zn_result = result  
-            else:
-                # rejection_sample が None または偽の値を返した場合の処理
-                print("rejection_sample から予期しない結果が返されました")
-                break  # ループを抜けるか、他のエラーハンドリングを行う
+Ahat, comn_per_party, matrix_zero, derived_challenge, sampled_rn, zn_result = sig1_sig2()           
+print(len(sampled_rn))
+print(len(zn_result))
 
 
+#3. Upon receiving restart, go to 1. Otherwise upon receiving (zj, rj) compute the combined signature
 
-    #3.Upon receiving restart from some party go to 1. Otherwise upon receiving (zj , rj ) for all j ∈ [n − 1] compute the combined signature as follows
-        # a. For each j in [n-1], reconstruct wj and validate the signature share
-        recon_wn = []
-        print(len(zn_result))
-        print(len(rn))
-        print(len(tn))
-        print('lencomn_per_party', len(comn_per_party))
-        flat_comn_per_party = [item for sublist in comn_per_party for item in sublist]
-        print('lenflatcomn_per_party', len(flat_comn_per_party))
-        for zn_result, rn, tn, flat_comn_per_party in zip(zn_result, rn, tn, flat_comn_per_party):
-            print(type(A_bar))
-            print(type(zn_result))
-            print(type(c))
-            print(type(tn))        
-            print(type(rn))
-            print(type(Ahat))
-            recon_wn_left = A_bar * zn_result
-            print('recon_wn_left', recon_wn_left)
-            recon_wn_right = c * tn
-            recon_wn = recon_wn_left - recon_wn_right
-            # recon_wnは多項式
-            recon_wn_list = [recon_wn]
-            print('recon_wn', recon_wn)
-            # Openck のチェック
-            for i in range(party_number):
-                if Openck(Ahat, flat_comn_per_party, recon_wn[i], rn) == 0:
-                    return "abort"
+# a. For each j in [n-1], reconstruct wj and validate the signature share
+def recon_wj(A_bar, zn_result, challenge, tn):
+#     challenge_coeffs = [challenge.coefficient(i) for i in range(N)] 
+    reconted_wj = []
+    for i in range(0, party_number):
+        recon_wn_left_vector = A_bar * zn_result[i]
+        recon_wn_right_vector = challenge * tn[i]
+        recon_wn_left = Matrix(recon_wn_left_vector).transpose()
+        recon_wn_right = Matrix(recon_wn_right_vector).transpose()
+        print(type(recon_wn_left), type(recon_wn_right))
+        reconted_wj.append(recon_wn_left - recon_wn_right)
+    return reconted_wj
 
-            # 追加の条件を確認
-            if zn_result.norm() > B:
-                return "abort"
-            
-            recon_wn.append(wn)
-
-        # b. Compute z and r
-        z = sum(zn_result)
-        r = sum(rn)
-
-        # If the protocol does not abort, Pn obtains a signature (com, z, r) as local output
-        return (com_sum, z, r)
-
-
+def validate_zn(zn_result):
+    for i in range(0, party_number):
+        zn_result_lifted = lift_ringeltvec_to_integervec(zn_result[i])
+        zn_result_lifted_norm = zn_result_lifted.norm()
+        print('zn_result_lifted_norm', zn_result_lifted_norm)
+        if zn_result_lifted_norm > B:
+            return "abort"
         
-# Example usage
-while True:
-    result = signature_generation(message, skn, pk, tn)
-    if result == "abort":
-        print("Protocol aborted.")
-        break
-    elif result == "restart":
-        print("Restarting the protocol.")
-        # Continue with the next iteration of the loop to restart the protocol
-        continue
+def validate_openck(sampled_rn, reconted_wj, matrix_zero, comn_per_party):
+    print('a')
+    flat_comn_per_party = [item for sublist in comn_per_party for item in sublist]
+    for i in range(party_number*k):
+        print('b')
+        openck_fleft = Ahat * sampled_rn[i]
+        print('d')
+        openck_matrix_wn = Matrix(Rq, 1, 1, reconted_wj[i])
+        print('e')
+        openck_zero_x = matrix_zero.stack(openck_matrix_wn)
+        print('f')
+        openck_result = openck_fleft + openck_zero_x
+        print('g')
+        sampled_rn_lifted = lift_ringeltvec_to_integervec(sampled_rn[i])
+        if flat_comn_per_party[i] == openck_result and sampled_rn_lifted.norm() <= B:
+            return 1
+        else:
+            return "abort"
+            break
+            
+#b. compute z  and r
+def compute_signature(zn_result, sampled_rn):
+    sign_zn = sum(zn_result)
+    sign_rn = sum(sampled_rn)
+    return (sign_zn, sign_rn)
+
+reconted_wj = recon_wj(A_bar, zn_result, derived_challenge, tn)
+print('reconted_wj', reconted_wj)
+print('rows', reconted_wj.nrows(), 'cols', reconted_wj.ncols())
+
+
+if validate_zn(zn_result) == "abort":
+    print("protocol aborted.")
+elif validate_openck(sampled_rn, reconted_wj, matrix_zero, comn_per_party) == "abort":
+    print("protocol aborted.")
+else:
+    sign_zn, sign_rn = compute_singnature(zn_result, sampled_rn)
+    print('sign_zn', sign_zn)
+    print('sign_rn', sign_rn)
+    
+    
+    
+#Verification
+from sage.matrix.constructor import Matrix
+
+# Verification Algorithm
+def verification_algorithm(message, signature, pk):
+    com_sum, z, r = signature
+    A_bar, t_combined = pk
+    
+    # zをMatrix型に変換
+    z_rows = []
+    max_length = max(len(item) if isinstance(item, tuple) else 1 for item in z)
+    for item in z:
+        if isinstance(item, tuple):
+            z_rows.append(list(item) + [Integer(0)]*(max_length - len(item)))
+        else:
+            z_rows.append([item] + [Integer(0)]*(max_length - 1))
+    z_matrix = Matrix(z_rows)
+    
+    # t_combinedがMatrix型でない場合、Matrix型に変換（必要に応じて）
+    if not isinstance(t_combined, Matrix):
+        t_combined = Matrix(t_combined)
+    
+    ck = H3(message, pk)
+    c = H0(com, message, pk)
+    w = A_bar * z_matrix - c * t_combined
+    if z_matrix.norm(2) <= Bn and Openck(ck, com, r, w) == 1:
+        return True
     else:
-        com_sum, z, r = result
-        print("Commitment com:", com_sum)
-        print("Signature z:", z)
-        print("Random value r:", r)
-        break  # Successful completion, exit the loop
+        return False
+
+# Example usage
+message = "example_message"  # Sample message for testing
+signature = (com, z, r)  # Sample signature from the provided signature algorithm output
+
+result = verification_algorithm(message, signature, pk)
+print(result)
