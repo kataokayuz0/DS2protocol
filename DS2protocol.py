@@ -131,6 +131,8 @@ print("skn", skn)
 print("pk", pk)
 
 
+
+
 #Protocol DS2.Signn(sid, skn, pk, µ)
 #Inputs
 # H3 function for computing the per-message commitment key
@@ -154,10 +156,11 @@ if sid in used_sids:
     print("Session ID has been used before. Protocol not executed.")
 else:
     used_sids.add(sid)
+
     
-    # 3. Pn locally computes the per-message commitment key
-    ck = H3(message, pk, ck_limit)
-    print("Per-message commitment key ck:", ck)
+# 3. Pn locally computes the per-message commitment key
+ck = H3(message, pk, ck_limit)
+print("Per-message commitment key ck:", ck)
     
     
 #Signature Generation
@@ -216,6 +219,7 @@ def polynomial_to_vector(poly, N):
 def convert_to_Rq_module(vec, Rq):
     return vector(Rq, [Rq(x) for x in vec])
 
+
 def lift_ringelt_to_integervec(z):
     return vector(ZZ, [(a + q // 2).lift() - q // 2 for a in z])
 
@@ -243,6 +247,7 @@ def calculate_sums(csn_list, zn_list, s):
         rohcsn_s_rm_total += exp(-pi * (csn_lifted.norm()) / s^2)
 
     return rohs_rm_total, rohcsn_s_rm_total
+
 
 def Ds(x, s, rohs_rm):
     x_lifted = lift_ringeltvec_to_integervec(x)
@@ -273,6 +278,7 @@ def computewn(A_bar, sampled_yn):
     flat_wn = [item for sublist in wn for item in sublist]  
     return flat_wn
 
+
 #b. compute comn with rn
 
 def samplern():
@@ -293,7 +299,8 @@ def CGen():
     matrix_up = ahat1_1.augment(ahat1_j)
     matrix_down = matrix_list1.augment(ahat2_j)
     Ahat = matrix_up.stack(matrix_down)
-    return Ahat    
+    return Ahat  
+
 
 def commitck(flat_wn, sampled_rn, Ahat):
     #Initialize commiment of each party
@@ -327,6 +334,7 @@ def generate_random_bits(com, message, pk, length):
     shake.update(seed.encode())
     return shake.digest(length)
 
+
 # 1または-1の値をkappa個生成
 def generate_coefficients(com, message, pk):
     random_bits = generate_random_bits(com, message, pk, kappa)
@@ -334,7 +342,7 @@ def generate_coefficients(com, message, pk):
     return coefficients
 
 # R上の多項式に係数をランダムに配置
-def create_random_polynomial(com, message, pk, N, kappa):
+def H0(com, message, pk, N, kappa):
     R = PolynomialRing(ZZ, 'x')
     x = R.gen()
 
@@ -389,7 +397,8 @@ def rejection_sample(csn_list, zn_list):
         else:
             rejec_zn_result.append(zn_vec)
     return rejec_zn_result
-        
+
+
 def sig1_sig2():
     while True:
         zn_result = []
@@ -398,11 +407,11 @@ def sig1_sig2():
         sampled_rn = samplern()    
         Ahat = CGen()    
         matrix_zero, comn_per_party = commitck(flat_wn, sampled_rn, Ahat)
+        print('comn_per_party', comn_per_party)
         com = setcom(comn_per_party)
 
-        #send out comn        
-
-        derived_challenge = create_random_polynomial(com, message, pk, N, kappa)
+        #send out comn       
+        derived_challenge = H0(com, message, pk, N, kappa)
         computed_zn, csn = computezn(derived_challenge, skn, sampled_yn)
         result = rejection_sample(csn, computed_zn)
         if result == "restart":
@@ -415,7 +424,8 @@ def sig1_sig2():
 
     return com, Ahat, comn_per_party, matrix_zero, derived_challenge, sampled_rn, zn_result
             
-com, Ahat, comn_per_party, matrix_zero, derived_challenge, sampled_rn, zn_result = sig1_sig2()           
+com, Ahat, comn_per_party, matrix_zero, derived_challenge, sampled_rn, zn_result = sig1_sig2()     
+print('sampled_rn', sampled_rn)
 print(len(sampled_rn))
 print(len(zn_result))
 
@@ -445,7 +455,7 @@ def validate_zn(zn_result):
         print('zn_result_lifted_norm', zn_result_lifted_norm)
         if zn_result_lifted_norm > B:
             return "abort"
-        
+
 def validate_openck(sampled_rn, reconted_wj, matrix_zero, comn_per_party):
     flat_comn_per_party = [item for sublist in comn_per_party for item in sublist]
     flat_reconted_wj = [item for sublist in reconted_wj for item in sublist]
@@ -456,6 +466,8 @@ def validate_openck(sampled_rn, reconted_wj, matrix_zero, comn_per_party):
         openck_result = openck_fleft + openck_zero_x
         sampled_rn_lifted = lift_sampled_rn_to_integer(sampled_rn[i])
         norms = [vec.norm() for vec in sampled_rn_lifted]
+        print('flat_comn_per_party[i]', flat_comn_per_party[i])
+        print('openck_result', openck_result)
         if all(n <= B for n in norms) and flat_comn_per_party[i] == openck_result:
             return 1
         else:
@@ -465,8 +477,10 @@ def validate_openck(sampled_rn, reconted_wj, matrix_zero, comn_per_party):
 #b. compute z  and r
 def compute_signature(zn_result, sampled_rn):
     sign_zn = sum(zn_result)
-    sign_rn = sum(sampled_rn)
-    return (sign_zn, sign_rn)
+    sign_rn_even = sum(sampled_rn[0::2])
+    sign_rn_odd = sum(sampled_rn[1::2])
+    sign_rn_list = [sign_rn_even, sign_rn_odd]
+    return (sign_zn, sign_rn_list)
 
 reconted_wj = recon_wj(A_bar, zn_result, derived_challenge, tn)
 print('reconted_wj', reconted_wj)
@@ -478,59 +492,50 @@ if validate_zn(zn_result) == "abort":
 elif validate_openck(sampled_rn, reconted_wj, matrix_zero, comn_per_party) == "abort":
     print("protocol aborted.")
 else:
-    sign_zn, sign_rn = compute_signature(zn_result, sampled_rn)
+    sign_zn, sign_rn_list = compute_signature(zn_result, sampled_rn)
     print('sign_zn', sign_zn)
-    print('sign_rn', sign_rn)
+    print('sign_rn_list', sign_rn_list)
     print(type(sign_zn))
-    print(type(sign_rn))
-    rows = sign_rn.nrows()
-    cols = sign_rn.ncols()
-    # サイズ（次元）を表示
-    print("Rows:", rows, "Columns:", cols)
+    print(type(sign_rn_list))
     
     
     
 #Verification
-# Verification Algorithm
 def ready_verification(com, sign_zn, message, pk):
-    A = pk[0]
-    t_combined = pk[1]
     ver_ck = H3(message, pk, ck_limit)
-    ver_c = create_random_polynomial(com, message, pk, N, kappa)
+    ver_c = H0(com, message, pk, N, kappa)
     ver_w = (A_bar * sign_zn) - (ver_c * t_combined)
     print('ver_w', ver_w)
     print('type_ver_w', type(ver_w))
     return ver_w
 
-
-def eachparty_openck(sign_rn, ver_w, matrix_zero, com):
-    sign_rn_lifted = lift_sampled_rn_to_integer(sign_rn)
-    sign_rn_norms = [vec.norm() for vec in sign_rn_lifted]
-    
+def eachparty_openck(sign_rn_list, ver_w, matrix_zero, com):
     for j in range(k):
-        each_openck_fleft = Ahat * sign_rn
+        sign_rn_lifted = lift_sampled_rn_to_integer(sign_rn_list[j])
+        sign_rn_norms = [vec.norm() for vec in sign_rn_lifted]
+        each_openck_fleft = Ahat * sign_rn_list[j]
         each_openck_matrix_wn = Matrix(Rq, 1, 1, ver_w[j])
         each_openck_zero_x = matrix_zero.stack(each_openck_matrix_wn)
         each_openck_result = each_openck_fleft + each_openck_zero_x
         print('each_openck_result', each_openck_result)
-        print('com', com)
-        if all(n <= B for n in sign_rn_norms) and com == each_openck_result:
+        print('com', com[j])
+        if all(n <= B for n in sign_rn_norms) and com[j] == each_openck_result:
             return 1
         else:
             print("eachparty_openck is aborted")
             return "abort"
 
-def eachparty_verification(sign_zn, com, sign_rn, ver_w):
+def eachparty_verification(sign_zn, com, sign_rn_list, ver_w):
     sign_zn_lifted = lift_ringeltvec_to_integervec(sign_zn)
     sign_zn_lifted_norm = sign_zn_lifted.norm()
     for i in range(party_number):
         cal_n = i + 1 
         Bn = sqrt(cal_n) * B
-        if (sign_zn_lifted_norm <= Bn) and (eachparty_openck(sign_rn, ver_w, matrix_zero, com) == 1):
+        if (sign_zn_lifted_norm <= Bn) and (eachparty_openck(sign_rn_list, ver_w, matrix_zero, com) == 1):
             return "verification  is valid"
         else:
             return "verification is invalid"
             break
 
 ver_w = ready_verification(com, sign_zn, message, pk)
-eachparty_verification(sign_zn, com, sign_rn, ver_w)
+eachparty_verification(sign_zn, com, sign_rn_list, ver_w)
