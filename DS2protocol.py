@@ -13,7 +13,7 @@ while next_prime_number % 8 != 5:
 q = next_prime_number
 # print(q)
 n = 256
-k, l = 16, 14
+k, l = 16, 14 # Dimensions of the matrices
 sigma = 3  # Standard deviation for Gaussian sampler
 party_number = 2 # Number of parties
 
