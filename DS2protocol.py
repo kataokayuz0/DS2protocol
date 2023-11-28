@@ -15,7 +15,7 @@ q = next_prime_number
 n = 256
 k, l = 2, 2
 sigma = 3  # Standard deviation for Gaussian sampler
-party_number = 5
+party_number = 2
 
 # Define the ring Rq
 R.<x> = PolynomialRing(ZZ)
